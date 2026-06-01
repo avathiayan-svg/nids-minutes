@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIDS Meeting Minutes</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #1a2e4a;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+}
+.header { text-align: center; margin-bottom: 32px; }
+.logo-wrap {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 72px; height: 72px; background: #1F4E79;
+  border-radius: 20px; font-size: 34px; margin-bottom: 16px;
+}
+.header h1 { font-size: 22px; font-weight: 900; color: #1a2332; letter-spacing: -0.02em; }
+.header p  { font-size: 14px; color: #778; margin-top: 6px; }
+.week-label {
+  font-size: 11px; font-weight: 800; color: #aab;
+  text-transform: uppercase; letter-spacing: .08em;
+  margin-bottom: 10px; display: block;
+}
+.week-row {
+  display: flex; align-items: center; gap: 10px;
+  background: #f4f7fb; border-radius: 14px;
+  padding: 12px 16px; margin-bottom: 28px;
+}
+.week-arrow {
+  width: 38px; height: 38px; flex-shrink: 0;
+  background: #fff; border: 1.5px solid #d8e2ee;
+  border-radius: 10px; font-size: 20px; font-weight: 700;
+  color: #1F4E79; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.week-arrow:hover { background: #1F4E79; color: #fff; border-color: #1F4E79; }
+.week-center { flex: 1; text-align: center; }
+.week-dates { font-size: 17px; font-weight: 800; color: #1a2332; }
+.week-year  { font-size: 12px; color: #99a; margin-top: 3px; }
+.gen-btn {
+  width: 100%; padding: 20px;
+  background: #1F4E79; color: #fff;
+  border: none; border-radius: 14px;
+  font-size: 19px; font-weight: 900;
+  cursor: pointer; letter-spacing: -.01em;
+  transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.gen-btn:hover:not(:disabled) {
+  background: #163d61;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(31,78,121,.4);
+}
+.gen-btn:disabled { background: #9fb2c4; cursor: not-allowed; transform: none; box-shadow: none; }
+.progress { margin-top: 24px; display: none; }
+.prog-step {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: 10px; margin-bottom: 8px;
+  font-size: 14px; font-weight: 600; transition: all .2s;
+}
+.prog-step.idle    { background: #f8f9fb; color: #bbc; }
+.prog-step.working { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.prog-step.done    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.prog-step.failed  { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.prog-icon { font-size: 20px; flex-shrink: 0; }
+.spin { display: inline-block; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.downloads { margin-top: 20px; display: none; }
+.dl-heading { text-align: center; font-size: 13px; font-weight: 700; color: #556; margin-bottom: 12px; }
+.dl-btn {
+  width: 100%; display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; margin-bottom: 10px;
+  background: #f4f7fb; border: 1.5px solid #d8e2ee;
+  border-radius: 12px; cursor: pointer; transition: all .15s; text-align: left;
+}
+.dl-btn:hover { background: #e3ecf7; border-color: #1F4E79; }
+.dl-icon { font-size: 26px; flex-shrink: 0; }
+.dl-info .dl-name { font-size: 14px; font-weight: 800; color: #1a2332; }
+.dl-info .dl-sub  { font-size: 12px; color: #778; margin-top: 2px; }
+.dl-arrow { margin-left: auto; font-size: 20px; color: #1F4E79; font-weight: 900; }
+.reset-btn {
+  width: 100%; margin-top: 8px; padding: 10px;
+  background: none; border: 1.5px solid #d8e2ee;
+  border-radius: 10px; font-size: 13px; font-weight: 700;
+  color: #778; cursor: pointer; transition: all .15s;
+}
+.reset-btn:hover { background: #f4f7fb; color: #445; }
+.footer {
+  color: rgba(255,255,255,.25);
+  font-size: 12px; text-align: center; margin-top: 24px;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="header">
+    <div class="logo-wrap">📋</div>
+    <h1>NIDS Meeting Minutes</h1>
+    <p>Precious Community Home Support — Perth, WA</p>
+  </div>
+  <span class="week-label">Select week</span>
+  <div class="week-row">
+    <button class="week-arrow" onclick="changeWeek(-1)">‹</button>
+    <div class="week-center">
+      <div class="week-dates" id="week-dates">—</div>
+      <div class="week-year"  id="week-year">—</div>
+    </div>
+    <button class="week-arrow" onclick="changeWeek(1)">›</button>
+  </div>
+  <button class="gen-btn" id="gen-btn" onclick="generate()">
+    <span id="btn-icon">⚡</span>
+    <span id="btn-text">Generate Meeting Minutes</span>
+  </button>
+  <div class="progress" id="progress">
+    <div class="prog-step idle" id="ps1"><span class="prog-icon" id="pi1">📂</span><span id="pt1">Connecting to ShiftCare...</span></div>
+    <div class="prog-step idle" id="ps2"><span class="prog-icon" id="pi2">📖</span><span id="pt2">Reading Santosh's notes...</span></div>
+    <div class="prog-step idle" id="ps3"><span class="prog-icon" id="pi3">📖</span><span id="pt3">Reading Thirza's notes...</span></div>
+    <div class="prog-step idle" id="ps4"><span class="prog-icon" id="pi4">🤖</span><span id="pt4">Filling meeting template...</span></div>
+    <div class="prog-step idle" id="ps5"><span class="prog-icon" id="pi5">📄</span><span id="pt5">Building Word documents...</span></div>
+  </div>
+  <div class="downloads" id="downloads">
+    <div class="dl-heading">✅ Ready — click to download</div>
+    <button class="dl-btn" id="dl1">
+      <span class="dl-icon">📄</span>
+      <div class="dl-info">
+        <div class="dl-name">Santosh Mon Abraham</div>
+        <div class="dl-sub" id="dl1-sub">Weekly Meeting Minutes</div>
+      </div>
+      <span class="dl-arrow">⬇</span>
+    </button>
+    <button class="dl-btn" id="dl2">
+      <span class="dl-icon">📄</span>
+      <div class="dl-info">
+        <div class="dl-name">Thirza Stirling</div>
+        <div class="dl-sub" id="dl2-sub">Weekly Meeting Minutes</div>
+      </div>
+      <span class="dl-arrow">⬇</span>
+    </button>
+    <button class="reset-btn" onclick="reset()">Generate another week</button>
+  </div>
+</div>
+<div class="footer">NIDS Automation · Precious Community Home Support</div>
+<script>
+let offset = 0;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function getWeek(off) {
+  const now = new Date(), day = now.getDay();
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + off * 7);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  return { mon, sun };
+}
+function fmt(d) { return d.getDate() + ' ' + MONTHS[d.getMonth()]; }
+function fmtAU(d) {
+  return String(d.getDate()).padStart(2,'0') + '/' +
+         String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear();
+}
+function updateWeek() {
+  const { mon, sun } = getWeek(offset);
+  document.getElementById('week-dates').textContent = fmt(mon) + ' – ' + fmt(sun);
+  document.getElementById('week-year').textContent  = mon.getFullYear();
+}
+function changeWeek(dir) { offset += dir; updateWeek(); reset(); }
+updateWeek();
+function setStep(n, state, text) {
+  const icons = { idle:'', working:'<span class="spin">⏳</span>', done:'✅', failed:'❌' };
+  const defaults = ['📂','📖','📖','🤖','📄'];
+  document.getElementById('ps'+n).className = 'prog-step ' + state;
+  document.getElementById('pi'+n).innerHTML = state === 'idle' ? defaults[n-1] : icons[state];
+  if (text) document.getElementById('pt'+n).textContent = text;
+}
+function resetSteps() {
+  const texts = ["Connecting to ShiftCare...","Reading Santosh's notes...","Reading Thirza's notes...","Filling meeting template...","Building Word documents..."];
+  for (let i=1;i<=5;i++) { document.getElementById('ps'+i).className='prog-step idle'; document.getElementById('pi'+i).innerHTML=['📂','📖','📖','🤖','📄'][i-1]; document.getElementById('pt'+i).textContent=texts[i-1]; }
+}
+function reset() {
+  document.getElementById('progress').style.display  = 'none';
+  document.getElementById('downloads').style.display = 'none';
+  document.getElementById('gen-btn').disabled = false;
+  document.getElementById('btn-icon').textContent = '⚡';
+  document.getElementById('btn-text').textContent = 'Generate Meeting Minutes';
+  resetSteps();
+}
+async function generate() {
+  document.getElementById('gen-btn').disabled = true;
+  document.getElementById('btn-icon').textContent = '⏳';
+  document.getElementById('btn-text').textContent = 'Working...';
+  document.getElementById('progress').style.display  = 'block';
+  document.getElementById('downloads').style.display = 'none';
+  resetSteps();
+  const { mon, sun } = getWeek(offset);
+  const meetingDate = fmtAU(new Date(sun.getTime() + 86400000));
+  const nextDate    = fmtAU(new Date(sun.getTime() + 7*86400000 + 86400000));
+  const weekLabel   = fmt(mon) + ' – ' + fmt(sun);
+  try {
+    setStep(1, 'working', 'Connecting to ShiftCare...');
+    setStep(2, 'working', "Reading Santosh's notes...");
+    setStep(3, 'working', "Reading Thirza's notes...");
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weekStart: fmtAU(mon), weekEnd: fmtAU(sun), meetingDate, nextDate })
+    });
+    setStep(1, 'done', 'ShiftCare connected ✓');
+    setStep(2, 'done', "Santosh's notes read ✓");
+    setStep(3, 'done', "Thirza's notes read ✓");
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error || 'Server error');
+    }
+    setStep(4, 'working', 'AI filling meeting template...');
+    const result = await resp.json();
+    setStep(4, 'done', 'Template filled ✓');
+    setStep(5, 'working', 'Building Word documents...');
+    function b64toBlob(b64) {
+      const bytes = atob(b64);
+      const arr = new Uint8Array(bytes.length);
+      for (let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+      return new Blob([arr], {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    }
+    const santoshBlob = b64toBlob(result.santosh);
+    const thirzaBlob  = b64toBlob(result.thirza);
+    setStep(5, 'done', 'Documents ready ✓');
+    document.getElementById('dl1-sub').textContent = 'Week of ' + weekLabel;
+    document.getElementById('dl2-sub').textContent = 'Week of ' + weekLabel;
+    document.getElementById('dl1').onclick = () => saveBlob(santoshBlob, result.santoshName);
+    document.getElementById('dl2').onclick = () => saveBlob(thirzaBlob,  result.thirzaName);
+    document.getElementById('downloads').style.display = 'block';
+    document.getElementById('btn-icon').textContent = '✅';
+    document.getElementById('btn-text').textContent = 'Done!';
+  } catch(err) {
+    const failStep = [1,2,3,4,5].find(n => document.getElementById('ps'+n).className.includes('working')) || 1;
+    setStep(failStep, 'failed', 'Error: ' + err.message);
+    document.getElementById('gen-btn').disabled = false;
+    document.getElementById('btn-icon').textContent = '⚡';
+    document.getElementById('btn-text').textContent = 'Try Again';
+  }
+}
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
+</script>
+</body>
+</html>
