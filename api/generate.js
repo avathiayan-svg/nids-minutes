@@ -1,56 +1,78 @@
-const axios = require('axios');
-const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-        WidthType, BorderStyle, ShadingType, AlignmentType } = require('docx');
+const https = require('https');
 
-async function getShiftCareNotes(email, password, clientId) {
-  const loginPageResp = await axios.get('https://app.shiftcare.com/users/sign_in', {
-    headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' },
-    maxRedirects: 5,
-  });
-  const csrfMatch = loginPageResp.data.match(/name="authenticity_token"[^>]*value="([^"]+)"/);
-  const csrf = csrfMatch ? csrfMatch[1] : '';
-  const cookies = loginPageResp.headers['set-cookie'] || [];
-  const cookieStr = cookies.map(c => c.split(';')[0]).join('; ');
-
-  const loginResp = await axios.post('https://app.shiftcare.com/users/sign_in',
-    `user[email]=${encodeURIComponent(email)}&user[password]=${encodeURIComponent(password)}&authenticity_token=${encodeURIComponent(csrf)}`,
-    {
+function httpsGet(url, cookies) {
+  return new Promise((resolve, reject) => {
+    const opts = new URL(url);
+    const options = {
+      hostname: opts.hostname,
+      path: opts.pathname + opts.search,
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cookie': cookieStr,
-        'User-Agent': 'Mozilla/5.0',
-        'Referer': 'https://app.shiftcare.com/users/sign_in',
-      },
-      maxRedirects: 5,
-    }
-  );
-
-  const sessionCookies = loginResp.headers['set-cookie'] || [];
-  const allCookies = [...cookies, ...sessionCookies]
-    .map(c => c.split(';')[0])
-    .filter((v, i, a) => a.findIndex(c => c.split('=')[0] === v.split('=')[0]) === i)
-    .join('; ');
-
-  const notesResp = await axios.get(
-    `https://app.shiftcare.com/users/clients/${clientId}?tab=communication`,
-    {
-      headers: {
-        'Cookie': allCookies,
         'User-Agent': 'Mozilla/5.0',
         'Accept': 'text/html',
-      },
-      maxRedirects: 5,
-    }
-  );
+        'Cookie': cookies || ''
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve({ data, headers: res.headers, status: res.statusCode }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
-  const html = notesResp.data;
+function httpsPost(hostname, path, body, headers) {
+  return new Promise((resolve, reject) => {
+    const bodyStr = typeof body === 'string' ? body : JSON.stringify(body);
+    const options = {
+      hostname,
+      path,
+      method: 'POST',
+      headers: {
+        'Content-Length': Buffer.byteLength(bodyStr),
+        ...headers
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve({ data: JSON.parse(data), headers: res.headers, status: res.statusCode }));
+    });
+    req.on('error', reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
+
+async function getShiftCareNotes(email, password, clientId) {
+  const loginPage = await httpsGet('https://app.shiftcare.com/users/sign_in', '');
+  const csrfMatch = loginPage.data.match(/name="authenticity_token"[^>]*value="([^"]+)"/);
+  const csrf = csrfMatch ? csrfMatch[1] : '';
+  const cookies = (loginPage.headers['set-cookie'] || []).map(c => c.split(';')[0]).join('; ');
+
+  const body = `user[email]=${encodeURIComponent(email)}&user[password]=${encodeURIComponent(password)}&authenticity_token=${encodeURIComponent(csrf)}`;
+  const loginResp = await httpsPost('app.shiftcare.com', '/users/sign_in', body, {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Cookie': cookies,
+    'User-Agent': 'Mozilla/5.0',
+    'Referer': 'https://app.shiftcare.com/users/sign_in',
+  });
+
+  const sessionCookies = (loginResp.headers['set-cookie'] || []).map(c => c.split(';')[0]);
+  const allCookies = [...cookies.split('; '), ...sessionCookies]
+    .filter((v, i, a) => v && a.findIndex(c => c.split('=')[0] === v.split('=')[0]) === i)
+    .join('; ');
+
+  const notesPage = await httpsGet(`https://app.shiftcare.com/users/clients/${clientId}?tab=communication`, allCookies);
+  const html = notesPage.data;
   const text = html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-
   const start = text.indexOf('Add Notes');
   return start > -1 ? text.slice(start, start + 8000) : text.slice(0, 8000);
 }
@@ -80,24 +102,25 @@ Return ONLY valid JSON, no explanation, no markdown:
 }
 
 Use areas: Personal Care, Health & Wellbeing, Medication, Nutrition, Daily Living, Community Access, Dialysis, Transport, Social/Emotional.
-Only include rows with real content. Flag issues only if genuinely concerning.`;
+Only include rows with real content.`;
 
-  const resp = await axios.post('https://api.anthropic.com/v1/messages', {
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1500,
-    messages: [{ role: 'user', content: prompt }]
-  }, {
-    headers: {
+  const resp = await httpsPost('api.anthropic.com', '/v1/messages',
+    { model: 'claude-sonnet-4-20250514', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] },
+    {
       'Content-Type': 'application/json',
       'x-api-key': anthropicKey,
       'anthropic-version': '2023-06-01'
     }
-  });
+  );
 
+  if (resp.status !== 200) throw new Error(`Anthropic API error: ${resp.status} ${JSON.stringify(resp.data)}`);
   const raw = resp.data.content.map(b => b.text || '').join('');
   const clean = raw.replace(/```json|```/g, '').trim();
   return JSON.parse(clean);
 }
+
+const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
+        WidthType, BorderStyle, ShadingType, AlignmentType } = require('docx');
 
 async function buildDocx(data, client) {
   const NAVY='1F4E79', WHITE='FFFFFF', LGREY='F2F2F2';
@@ -108,12 +131,7 @@ async function buildDocx(data, client) {
   function sh(t){return new Table({width:{size:9360,type:WidthType.DXA},columnWidths:[9360],rows:[new TableRow({children:[new TableCell({borders:B,width:{size:9360,type:WidthType.DXA},shading:{fill:NAVY,type:ShadingType.CLEAR},margins:{top:80,bottom:80,left:140,right:140},children:[new Paragraph({children:[new TextRun({text:t,bold:true,color:WHITE,size:20,font:'Arial'})]})]})]})]})}
   function gap(){return new Paragraph({spacing:{before:120,after:60},children:[new TextRun('')]})}
   function sgap(){return new Paragraph({spacing:{before:60,after:40},children:[new TextRun('')]})}
-  function mkt(cols,hdrs,rows,min){
-    const tot=cols.reduce((a,b)=>a+b,0);
-    let d=rows&&rows.length?rows:[];
-    while(d.length<(min||0))d.push(new Array(cols.length).fill(''));
-    return new Table({width:{size:tot,type:WidthType.DXA},columnWidths:cols,rows:[new TableRow({children:hdrs.map((h,i)=>hc(h,cols[i]))}), ...d.map((r,ri)=>new TableRow({children:cols.map((w,ci)=>dc(r[ci]||'',w,ri%2===0?WHITE:LGREY))}))]});
-  }
+  function mkt(cols,hdrs,rows,min){const tot=cols.reduce((a,b)=>a+b,0);let d=rows&&rows.length?rows:[];while(d.length<(min||0))d.push(new Array(cols.length).fill(''));return new Table({width:{size:tot,type:WidthType.DXA},columnWidths:cols,rows:[new TableRow({children:hdrs.map((h,i)=>hc(h,cols[i]))}), ...d.map((r,ri)=>new TableRow({children:cols.map((w,ci)=>dc(r[ci]||'',w,ri%2===0?WHITE:LGREY))}))]});}
   function tick(checked,label){return new TableRow({children:[new TableCell({borders:B,width:{size:9360,type:WidthType.DXA},margins:{top:70,bottom:70,left:140,right:140},children:[new Paragraph({children:[new TextRun({text:(checked?'☒':'☐')+'  '+label,size:19,font:'Arial'})]})]})]});}
   const att=mkt([3120,3120,3120],['Name','Role','Present (P) / Absent (A)'],(data.attendance||[]).map(a=>[a.name,a.role,`${a.name} (${a.status})`]),4);
   const prev=mkt([2880,1800,1800,2880],['Action Item','Responsible Staff','Status / Outcome','Comments'],(data.prev_actions||[]).filter(r=>r.action).map(r=>[r.action,r.responsible,r.status,r.comments]),2);
